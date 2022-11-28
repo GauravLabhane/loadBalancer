@@ -67,3 +67,14 @@ const handleRequest = async function(req, res) {
     res.status(200).send('Success');
  });
 
+
+
+ app.get('/getAllServers', async function (req, res) {
+
+    let configs = fs.readFileSync('./config.json', 'utf-8');
+    configs = JSON.parse(configs);
+    res.status(200).send(configs.servers);
+ });
+
+
+
