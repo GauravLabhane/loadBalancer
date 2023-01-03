@@ -19,27 +19,39 @@ var server = app.listen(80, function () {
 
  const handleRequest = async function(req, res) {
     let url = ''
-;    try {
+    ;    try {
         counter += 1;
         counter = counter % servers.length;
         let server = servers[counter];
-        // let serverHealthCheck = await checkServerHealth(server);
-        url = `${server.host}:${server.port}${req.url}`;
-        const response = await axios({
-            url: url,
-            headers: req.headers,
-            method: req.method,
-            data: req.body,
-            params: req.query
-        });
-        console.log(`getting response from ${url}`);
-        return res.send(response.data);
-        // counter += 1;
-        // counter = counter % servers.length;
+        let serverHealthCheck = await checkServerHealth(server);
+        console.log(server.host, server.port ,'is Active : ', serverHealthCheck);
+        if (serverHealthCheck) {
+            retryCounter = 0;
+            url = `${server.host}:${server.port}${req.url}`;
+            const response = await axios({
+                url: url,
+                headers: req.headers,
+                method: req.method,
+                data: req.body,
+                params: req.query
+            });
+            console.log(`getting response from ${url}`);
+            return res.status(200).send(response.data);
+        } else {
+            retryCounter += 1;
+            if(retryCounter <= servers.length) {
+                await handleRequest(req,res);
+            } else {
+                console.log('No Servers respondiong');
+                return res.status(400).send({status: 'No Servers respondiong'})
+            }
+        }
+
+
     } catch (error) {
         // console.error(error);
         console.log(url , ' not responding, redirecting to ', servers[(counter + 1) % servers.length].host + ':' + servers[(counter + 1) % servers.length].port + req.url);
-        await handleRequest(req,res);
+        return res.status(400).send({msg: 'Request Failed', error: error.message});
     }
 };
 
@@ -58,7 +70,7 @@ let servers = serverConfigs.servers;
 console.log(servers);
 let counter = -1;
 
-
+let retryCounter = 0;
 
 
 
@@ -135,6 +147,22 @@ const removeServer = function(host,port) {
         return null;
     }
    
+}
+
+async function checkServerHealth(server) {
+    try {
+        let url = `${server.host}:${server.port}/healthCheck`; 
+        
+        console.log(url); 
+        const response = await axios({
+            url: url
+        });
+        console.log(response.data.status, '------');
+        return response.data.status;
+    } catch {
+        return false;
+    }
+
 }
 
 

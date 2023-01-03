@@ -8,6 +8,10 @@ app.get('/', function (req, res) {
  })
  
 
+ app.get('/healthCheck', function (req, res) {
+   res.send({status: true});
+})
+
  var server = app.listen(8082, function () {
     var port = server.address().port;
     console.log("Example app listening at http://localhost:%s", port)
