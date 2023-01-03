@@ -1,7 +1,8 @@
 const express = require('express');
 const app = express();
 const axios = require('axios');
-var fs = require('fs');
+const fs = require('fs');
+const _ = require('underscore');
 const serverConfigs = require('./config.json');
 
 
@@ -10,23 +11,19 @@ var server = app.listen(80, function () {
     console.log("Example app listening at http://localhost:%s", port)
  });
 
+ let internalRequests = [
+    '/getAllServers',
+    '/addServer',
+    '/removeServer'
+ ]
 
-app.get('/', function (req, res) {
-    handleRequest(req, res);
- })
- 
-
-let servers = serverConfigs.servers;
-console.log(servers);
-console.log(servers[0]);
-let counter = -1;
-
-const handleRequest = async function(req, res) {
+ const handleRequest = async function(req, res) {
     let url = ''
 ;    try {
         counter += 1;
         counter = counter % servers.length;
         let server = servers[counter];
+        // let serverHealthCheck = await checkServerHealth(server);
         url = `${server.host}:${server.port}${req.url}`;
         const response = await axios({
             url: url,
@@ -35,7 +32,7 @@ const handleRequest = async function(req, res) {
             data: req.body,
             params: req.query
         });
-        console.log(`gettinf response from ${url}`);
+        console.log(`getting response from ${url}`);
         return res.send(response.data);
         // counter += 1;
         // counter = counter % servers.length;
@@ -45,6 +42,23 @@ const handleRequest = async function(req, res) {
         await handleRequest(req,res);
     }
 };
+
+app.use(async function (req, res, next) {
+    if(internalRequests.indexOf(req.path) == -1) {
+        await handleRequest(req, res);
+    }
+    next();   
+});
+// app.get('/', function (req, res) {
+//     handleRequest(req, res);
+//  })
+ 
+
+let servers = serverConfigs.servers;
+console.log(servers);
+let counter = -1;
+
+
 
 
 
@@ -59,15 +73,35 @@ const handleRequest = async function(req, res) {
         host,
         port
     }
-    configs.servers.push(newServer);
-    fs.writeFileSync('config.json', JSON.stringify(configs), function (err) {
-        if (err) throw err;
-        console.log('Updated!');
-      });
+    let duplicateCheck = _.filter(configs, (server)=> {
+        return server.host == newServer.host && server.port == newServer.port;
+    });
+    if(!duplicateCheck) {
+        configs.servers.push(newServer);
+        fs.writeFileSync('config.json', JSON.stringify(configs), function (err) {
+            if (err) throw err;
+            console.log('Updated!');
+          });
+    } else {
+        res.status(200).send('Server Already Exist');
+    }
+
     res.status(200).send('Success');
  });
 
-
+ app.post('/removeServer', async function (req, res) {
+    let host = req.query.host;
+    let port = req.query.port;
+    console.log(host, port);
+    let isRemoved = removeServer(host, port);
+    if(isRemoved == true) {
+       return res.status(200).send('Success');
+    } else if (isRemoved == false) {
+        return res.status(200).send('No Server Found');
+    } else {
+        return res.status(200).send('Something went wrong');
+    }
+ });
 
  app.get('/getAllServers', async function (req, res) {
 
@@ -75,6 +109,32 @@ const handleRequest = async function(req, res) {
     configs = JSON.parse(configs);
     res.status(200).send(configs.servers);
  });
-
+ 
+const removeServer = function(host,port) {
+    try {
+        let configs = fs.readFileSync('./config.json', 'utf-8');
+        configs = JSON.parse(configs);
+        let servers = configs.servers;
+        let initialLength = servers.length;
+        console.log(servers);
+        servers = _.filter(servers, ((server) => {
+            return server.host !== host || server.port !== port;
+        }));
+        if(initialLength == servers.length) {
+            return false;
+        } else {
+            configs.servers = servers;
+            fs.writeFileSync('config.json', JSON.stringify(configs), function (err) {
+                if (err) throw err;
+                console.log('Updated!');
+              });
+            return true;
+        }
+    } catch (e) {
+        console.log(e);
+        return null;
+    }
+   
+}
 
 
